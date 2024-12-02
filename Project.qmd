@@ -5,18 +5,22 @@ format: html
 editor: visual
 ---
 
+### Libraries
+
 ```{r}
 #| label: load-libraries
 library(tidyverse)
 library(tidymodels)
 ```
-
+### Data Reading
 
 ```{r}
 #| label: read-data
 cdc <- read_csv('diabetes-cdc.csv')
 
 cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
+
+pancreas <- read_csv("data/pancreas_patients.csv")
 ```
 
 
@@ -37,3 +41,66 @@ cdc |>
 cdc_balanced |> 
   mutate()
 ```
+
+
+```{r}
+#| label: pancreas reformatting
+
+pancreas <- pancreas |>
+  rename(death = event) |>
+  mutate(death = as.factor(as.integer(death)) %>% 
+           fct_relevel("1"),
+         DIAB = factor(DIAB),
+         EDUCATION = factor(EDUCATION),
+         ETHCAT = factor(ETHCAT),
+         WORK_INCOME_TCR = factor(WORK_INCOME_TCR),
+         ON_DIALYSIS = factor(ON_DIALYSIS))
+  
+full_pancreas_rec <- recipe(death ~ ., data=pancreas) |>
+  step_dummy(ABO, DIAB, EDUCATION, ETHCAT, GENDER, WORK_INCOME_TCR, ON_DIALYSIS) |>
+  step_normalize(INIT_AGE, INIT_BMI_CALC, HGT_CM_TCR, TOT_SERUM_ALBUM, WGT_KG_TCR, INIT_CPRA, INIT_QUAL_DIFF)
+
+pancreas_cvs <- vfold_cv(pancreas, v=5)
+
+pancreas_test <- pancreas %>%
+  sample_frac(size = 0.2)
+```
+
+### Logistic Regression (No Penalty), Pancreas Data
+
+```{r}
+#| label: logistic regression on pancreas
+
+logit_mod <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
+
+pancreas_lr_wflow <- workflow() |>
+  add_recipe(full_pancreas_rec) |>
+  add_model(logit_mod)
+
+pancreas_lr_fit <- pancreas_lr_wflow |>
+  fit(pancreas)
+
+custom_metrics <- metric_set(accuracy, roc_auc, precision, recall, f_meas)
+
+pancreas_lr_cv <- logit_mod |>
+  fit_resamples(full_pancreas_rec, 
+                resamples = pancreas_cvs,
+                metrics = custom_metrics)
+
+pancreas_lr_cv |> collect_metrics()
+
+pancreas |> 
+  mutate(predicted = predict(pancreas_lr_fit, new_data = pancreas_test)$.pred_class))
+
+pancreas |>
+  count(death = 1)
+
+pancreas |>
+  group_by(death) |> 
+  count()
+```
+
+
+
