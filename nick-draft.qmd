@@ -265,7 +265,6 @@ cdc_balanced |>
 
 ```
 
-
 ```{r}
 #| label: data-cleaning
 
@@ -287,9 +286,7 @@ cdc <- cdc |>
 
 ```
 
-
 # Preliminary Model
-
 
 ```{r}
 #| label: balanced-data-logistic-reg
@@ -325,8 +322,6 @@ cdc_balanced |>
 
 ```
 
-
-
 ```{r}
 #| label: full-data-logistic-reg
 set.seed(1738)
@@ -358,7 +353,6 @@ cdc |>
            estimate = pred)
 
 ```
-
 
 ## Does training on balanced help predict on unbalanced?
 
@@ -394,7 +388,6 @@ list('accuracy' = ac$.estimate,
      'f1' = f1$.estimate)
 ```
 
-
 # MODEL FITTING
 
 ### Creating test set
@@ -403,7 +396,7 @@ list('accuracy' = ac$.estimate,
 
 ```{r}
 #| label: test-set
-test_set <- sample(cdc, size = 10000)
+test_set <- cdc[sample(nrow(cdc), size = 10000),]
 ```
 
 ### Logistic Regression (No Penalty)
@@ -411,14 +404,63 @@ test_set <- sample(cdc, size = 10000)
 ```{r}
 #| label: logistic-regression
 
+logit_simple_mod <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
+
+logit_simple_wflow <- workflow() |>
+  add_recipe(balanced_rec) |>
+  add_model(logit_simple_mod)
+
+logit_simple_fit <- logit_simple_wflow |>
+  fit(cdc_balanced)
+pull_workflow_fit(logit_simple_fit)
+
+logit_cv <- logit_simple_mod |>
+  fit_resamples(balanced_rec, 
+                resamples = balanced_cvs,
+                metrics = custom_metrics)
+
+logit_cv |> collect_metrics()
+
 ```
+
+##### Results:
+
+- Best ROC AUC: 0.8264015
 
 ### Logistic Regression (Penalty)
 
 ```{r}
 #| label: logistic-regression-tune
 
+
+grid_params <- grid_regular(penalty(),
+                            mixture(),
+                            levels=4)
+
+lr_tune <- logistic_reg(penalty=tune(), mixture = tune()) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+lr_wflow_tune <- workflow() |>
+  add_recipe(balanced_rec) |>
+  add_model(lr_tune)
+
+lr_grid_search <- tune_grid(lr_wflow_tune,
+                               resamples = balanced_cvs,
+                               grid = grid_params)
+
+
+lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max(mean, n=10)
+
 ```
+
+##### Results:
+
+- Best ROC AUC: 0.8264048
+- Best penalty: 1.000000e-10
+- Best mixture: 0.3333333
 
 ### lda
 
@@ -426,7 +468,6 @@ test_set <- sample(cdc, size = 10000)
 #| label: lda
 
 ```
-
 
 ### qda
 
