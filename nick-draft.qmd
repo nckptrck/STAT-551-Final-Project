@@ -449,7 +449,7 @@ test_set <- sample(cdc, size = 10000)
 
 ```
 
-### Logistic Regression (No Penalty)
+### Random Forest
 
 ```{r}
 #| label: random-forest
