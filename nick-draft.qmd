@@ -1,0 +1,457 @@
+---
+title: "Project"
+author: "Billy Block, Ruben Jimenez, and Nick Patrick"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: load-libraries
+library(tidyverse)
+library(tidymodels)
+library(gridExtra)
+```
+
+```{r}
+#| label: read-data
+cdc <- read_csv('diabetes-cdc.csv')
+
+cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
+```
+
+```{r}
+#| label: eda
+cdc |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(0, 1),
+                                  labels = c('Healthy',
+                                             'Prediabetes/Diabetes'))) |> 
+  ggplot(aes(x = Diabetes_binary, fill = Diabetes_binary)) +
+  geom_bar() +
+  scale_fill_manual(values = c('blue3', 'red3', 'green2')) +
+  labs(x = 'Diagnosis',
+       y = 'Count',
+       title = 'Full Data Set: Distribution of Target Variable') +
+  theme_classic()
+
+# Boxplot: distribution of target variable in balance data set
+cdc_balanced |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(0,1),
+                                  labels = c('Healthy', 'Prediabetes/Diabetes'))) |> 
+  ggplot(aes(x = Diabetes_binary, fill = Diabetes_binary)) +
+  geom_bar() +
+  scale_fill_manual(values = c('blue3', 'red3')) +
+  labs(x = 'Diagnosis',
+       y = 'Count',
+       title = 'Balanced Data Set: Distribution of Target Variable') +
+  theme_classic()
+
+# Find most highly correlated variables
+cors <- data.frame(cor(cdc_balanced)[1,]) 
+
+colnames(cors) <- c('correlation')
+
+cors$var <- rownames(cors)
+
+cors <- cors |> 
+  filter(var != 'Diabetes_binary')
+
+cors |> 
+  arrange(desc(correlation)) |> 
+  ggplot(aes(x = reorder(var, -correlation), y = correlation)) +
+  geom_bar(stat = "identity", fill = 'black') +
+  coord_flip() +
+  labs(y = "Correlation",
+       x = "Feature",
+       title = "Ordered Correlations Between Features and Diabetes") +
+  theme_classic()
+
+
+# Explore distribution of highly correlated features
+
+# General Health
+cdc_balanced |> 
+  group_by(GenHlth) |> 
+  count() |> 
+  mutate(GenHlth = factor(GenHlth,
+                          levels = c(1,2,3,4,5),
+                          labels = c('Excellent',
+                                     'Very Good',
+                                     'Good',
+                                     'Poor',
+                                     'Very Poor'
+                          ))) |> 
+  ggplot(aes(x = GenHlth, y = n)) +
+  geom_bar(stat = 'identity', fill = 'grey33')  + 
+  labs(y = 'Count',
+       x = 'General Health',
+       title = 'Distribution of General Health') +
+  theme_classic()
+
+# Income
+cdc_balanced |> 
+  group_by(Income) |> 
+  count() |> 
+  mutate(Income = factor(Income,
+                         levels = c(1,2,3,4,5,6,7,8),
+                         labels = c('< $10k',
+                                    '2',
+                                    '< $35k',
+                                    '4',
+                                    '5',
+                                    '6',
+                                    '7',
+                                    '> $ 75k'
+                         )))|> 
+  ggplot(aes(x = Income, y = n)) +
+  geom_bar(stat = 'identity', fill = 'grey33')  + 
+  labs(y = 'Count',
+       x = 'Income Level',
+       title = 'Distribution of Income') +
+  theme_classic()
+
+
+# Explore Highly Correlated features w/ target
+
+# Proportion by General Health
+cdc_balanced |> 
+  group_by(GenHlth, Diabetes_binary) |> 
+  count() |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(0,1),
+                                  labels = c('Healthy',
+                                             'Preiabetes/Diabetes')),
+         GenHlth = factor(GenHlth,
+                          levels = c(1,2,3,4,5),
+                          labels = c('Excellent',
+                                     'Very Good',
+                                     'Good',
+                                     'Poor',
+                                     'Very Poor'
+                          ))) |> 
+  ggplot(aes(x = GenHlth, y = n, fill = Diabetes_binary)) +
+  geom_bar(stat = 'identity', position = 'fill') +
+  scale_fill_manual(values = c('blue3', 'red3')) + 
+  labs(y = 'Proportion',
+       x = 'General Health',
+       title = 'Proportion of Diabetes By General Health') +
+  theme_classic()
+
+# Proportion by Income
+cdc_balanced |> 
+  group_by(Income, Diabetes_binary) |> 
+  count() |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(0,1),
+                                  labels = c('Healthy',
+                                             'Preiabetes/Diabetes')),
+         Income = factor(Income,
+                         levels = c(1,2,3,4,5,6,7,8),
+                         labels = c('< $10k',
+                                    '2',
+                                    '< $35k',
+                                    '4',
+                                    '5',
+                                    '6',
+                                    '7',
+                                    '> $ 75k'
+                         ))) |> 
+  ggplot(aes(x = Income, y = n, fill = Diabetes_binary)) +
+  geom_bar(stat = 'identity', position = 'fill') +
+  scale_fill_manual(values = c('blue3', 'red3')) + 
+  labs(y = 'Proportion',
+       x = 'Income',
+       title = 'Proportion of Diabetes By Income Level') +
+  theme_classic()
+
+
+
+# Explore distribution of protected attributes
+
+# Sex
+cdc_balanced |> 
+  group_by(Sex) |> 
+  count() |> 
+  mutate(Sex = factor(Sex,
+                      levels = c(0,1),
+                      labels = c('Female',
+                                 'Male'))) |> 
+  ggplot(aes(x = Sex, y = n)) +
+  geom_bar(stat = 'identity', fill = 'grey33')  + 
+  labs(y = 'Count',
+       x = 'Sex',
+       title = 'Distribution of Sex') +
+  theme_classic()
+
+# Age
+cdc_balanced |> 
+  group_by(Age) |> 
+  count() |> 
+  mutate(Age = factor(Age,
+                      levels = c(1,2,3,4,5,6,7,8,9,10,11,12,13),
+                      labels = c('18-24',
+                                 '25-29',
+                                 '30-34',
+                                 '35-39',
+                                 '40-44',
+                                 '45-49',
+                                 '50-54',
+                                 '55-59',
+                                 '60-64',
+                                 '65-69',
+                                 '70-74',
+                                 '75-79',
+                                 '80+'))) |> 
+  ggplot(aes(x = Age, y = n)) +
+  geom_bar(stat = 'identity', fill = 'grey49')  + 
+  labs(y = 'Count',
+       x = 'Age Group',
+       title = 'Distribution of Age') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Explore distribution of diabetes within protected attributes
+cdc_balanced |> 
+  group_by(Sex, Diabetes_binary) |> 
+  count() |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(0,1),
+                                  labels = c('Healthy',
+                                             'Preiabetes/Diabetes')),
+         Sex = factor(Sex,
+                      levels = c(0,1),
+                      labels = c('Female',
+                                 'Male'))) |> 
+  ggplot(aes(x = Sex, y = n, fill = Diabetes_binary)) +
+  geom_bar(stat = 'identity', position = 'fill')  + 
+  scale_fill_manual(values = c('blue3', 'red3')) +
+  labs(y = 'Count',
+       x = 'Sex',
+       title = 'Proportion of Diabetes by Sex') +
+  theme_classic()
+
+cdc_balanced |> 
+  group_by(Age, Diabetes_binary) |> 
+  count() |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(0,1),
+                                  labels = c('No Diabetes',
+                                             'Preiabetes/Diabetes')),
+         Age = factor(Age,
+                      levels = c(1,2,3,4,5,6,7,8,9,10,11,12,13),
+                      labels = c('18-24',
+                                 '25-29',
+                                 '30-34',
+                                 '35-39',
+                                 '40-44',
+                                 '45-49',
+                                 '50-54',
+                                 '55-59',
+                                 '60-64',
+                                 '65-69',
+                                 '70-74',
+                                 '75-79',
+                                 '80+'))) |> 
+  ggplot(aes(x = Age, y = n, fill = Diabetes_binary)) +
+  geom_bar(stat = 'identity', position = 'fill')  + 
+  scale_fill_manual(values = c('blue3', 'red3')) +
+  labs(y = 'Count',
+       x = 'Age',
+       title = 'Proportion of Diabetes by Age') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+#| label: data-cleaning
+
+cdc_balanced <- cdc_balanced |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(1,0)),
+         GenHlth = as.factor(GenHlth),
+         Age = as.factor(Age),
+         Education = as.factor(Education),
+         Income = as.factor(Income))
+
+cdc <- cdc |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(1,0)),
+         GenHlth = as.factor(GenHlth),
+         Age = as.factor(Age),
+         Education = as.factor(Education),
+         Income = as.factor(Income))
+
+```
+
+
+# Preliminary Model
+
+
+```{r}
+#| label: balanced-data-logistic-reg
+set.seed(1738)
+balanced_cvs <- vfold_cv(cdc_balanced, v = 5)
+
+logit_mod <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
+
+balanced_rec <- recipe(Diabetes_binary ~ ., data = cdc_balanced) |> 
+  step_dummy(all_factor_predictors()) |> 
+  step_normalize(BMI, MentHlth, PhysHlth)
+
+logit_wf <- workflow() |> 
+  add_model(logit_mod) |> 
+  add_recipe(balanced_rec)
+
+custom_metrics <- metric_set(accuracy, roc_auc, precision, recall, f_meas)
+
+res <- fit_resamples(logit_wf,
+                     resamples = balanced_cvs,
+                     metrics = custom_metrics)
+
+res |> collect_metrics()
+
+balanced_fit <- logit_wf |> fit(cdc_balanced)
+
+cdc_balanced |> 
+  mutate(pred = predict(balanced_fit, new_data = cdc_balanced)$.pred_class) |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = pred)
+
+```
+
+
+
+```{r}
+#| label: full-data-logistic-reg
+set.seed(1738)
+full_cvs <- vfold_cv(cdc, v = 5)
+
+logit_mod <- logistic_reg() %>%
+  set_mode("classification") %>%
+  set_engine("glm")
+
+full_rec <- recipe(Diabetes_binary ~ ., data = cdc) |> 
+  step_dummy(all_factor_predictors()) |> 
+  step_normalize(BMI, MentHlth, PhysHlth)
+
+logit_wf2 <- workflow() |> 
+  add_model(logit_mod) |> 
+  add_recipe(full_rec)
+
+res <- fit_resamples(logit_wf2,
+                     resamples = full_cvs,
+                     metrics = custom_metrics)
+
+res |> collect_metrics()
+
+full_fit <- logit_wf2 |> fit(cdc)
+
+cdc |> 
+  mutate(pred = predict(full_fit, new_data = cdc)$.pred_class) |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = pred)
+
+```
+
+
+## Does training on balanced help predict on unbalanced?
+
+```{r}
+#| label: balanced-predict-full
+print('BALANCED TRAINING:')
+cdc <- cdc |> 
+  mutate(balanced.pred = predict(balanced_fit, new_data = cdc)$.pred_class)
+
+ac <- accuracy(cdc, truth = Diabetes_binary, estimate = balanced.pred)
+pr <-  precision(cdc, truth = Diabetes_binary, estimate = balanced.pred)
+rec <- recall(cdc, truth = Diabetes_binary, estimate = balanced.pred)
+f1 <- f_meas(cdc, Diabetes_binary, balanced.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+
+
+print('FULL TRAINING:')
+cdc <- cdc |> 
+  mutate(full.pred = predict(full_fit, new_data = cdc)$.pred_class)
+
+ac <- accuracy(cdc, truth = Diabetes_binary, estimate = full.pred)
+pr <-  precision(cdc, truth = Diabetes_binary, estimate = full.pred)
+rec <- recall(cdc, truth = Diabetes_binary, estimate = full.pred)
+f1 <- f_meas(cdc, Diabetes_binary, balanced.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+```
+
+
+# MODEL FITTING
+
+### Creating test set
+
+**Random Sample of Unbalanced Data**
+
+```{r}
+#| label: test-set
+test_set <- sample(cdc, size = 10000)
+```
+
+### Logistic Regression (No Penalty)
+
+```{r}
+#| label: logistic-regression
+
+```
+
+### Logistic Regression (Penalty)
+
+```{r}
+#| label: logistic-regression-tune
+
+```
+
+### lda
+
+```{r}
+#| label: lda
+
+```
+
+
+### qda
+
+```{r}
+#| label: qda
+
+```
+
+### Decision Tree
+
+```{r}
+#| label: decision-tree
+
+```
+
+### Bagging
+
+```{r}
+#| label: bagging
+
+```
+
+### Logistic Regression (No Penalty)
+
+```{r}
+#| label: random-forest
+
+```
