@@ -10,6 +10,8 @@ editor: visual
 library(tidyverse)
 library(tidymodels)
 library(gridExtra)
+library(baguette)
+library(discrim)
 ```
 
 ```{r}
@@ -18,6 +20,9 @@ cdc <- read_csv('diabetes-cdc.csv')
 
 cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
 ```
+
+
+## Checkpoint 2
 
 ```{r}
 #| label: eda
@@ -466,33 +471,158 @@ lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 
 ```{r}
 #| label: lda
+lda_mod <- discrim_linear() %>%
+  set_engine("MASS") %>%
+  set_mode("classification")
 
+lda_cv <- lda_mod |> 
+  fit_resamples(balanced_rec,
+                resamples = balanced_cvs)
+
+lda_cv |> collect_metrics()
 ```
+##### Results:
 
+<<<<<<< Updated upstream
+=======
+- Best ROC AUC: 0.8254003	
+
+>>>>>>> Stashed changes
 ### qda
 
 ```{r}
 #| label: qda
+qda_mod <- discrim_regularized(frac_common_cov = 0) %>% 
+             set_engine("klaR") %>% 
+             set_mode("classification")
 
+qda_cv <- qda_mod |> 
+  fit_resamples(balanced_rec,
+                resamples = balanced_cvs)
+
+qda_cv |> collect_metrics()
 ```
+
+##### Results:
+
+- Best ROC AUC: 0.7784700	
 
 ### Decision Tree
 
 ```{r}
 #| label: decision-tree
 
+tree_grid <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          min_n(), 
+                          levels = 3)
+
+balanced_rec <- recipe(Diabetes_binary ~ ., data = cdc_balanced) |> 
+  step_dummy(all_factor_predictors()) |> 
+  step_normalize(BMI, MentHlth, PhysHlth)
+
+tree_mod_tune <- decision_tree(cost_complexity = tune(),
+                          tree_depth = tune(),
+                          min_n = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wflow <- workflow() %>%
+  add_model(tree_mod_tune) %>% 
+  add_recipe(balanced_rec)
+
+tree_grid_search <-
+  tune_grid(
+    tree_wflow,
+    resamples = balanced_cvs,
+    grid = tree_grid
+  )
+
+tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+##### Results:
+
+- Best ROC AUC: 0.8110074	
+- Cost Complexity: 1.000000e-10	
+- Tree Depth: 8
+- Minimum n: 2
+
 
 ### Bagging
 
 ```{r}
 #| label: bagging
+bag_tree_tune <- bag_tree(cost_complexity = tune(),
+                          tree_depth = tune(),
+                          min_n = tune()) %>%
+  set_engine("rpart", times = 5) %>%
+  set_mode("classification")
 
+
+bagged_wf <- workflow() |> 
+  add_recipe(balanced_rec) |> 
+  add_model(bag_tree_tune)
+
+bagged_grid_search <- tune_grid(
+    bagged_wf,
+    resamples = balanced_cvs,
+    grid = tree_grid
+  )
+
+bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+
+##### Results:
+
+- Best ROC AUC: 0.8197403
+- Cost Complexity: 3.162278e-06
+- Tree Depth: 8
+- Minimum n: 40
+
 
 ### Random Forest
 
 ```{r}
 #| label: random-forest
 
+rf_tune <- rand_forest(mtry = tune(), 
+                       min_n = tune(),
+                       trees = 200) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+
+rf_grid <- grid_regular(mtry(c(1,21)),
+                        min_n(), 
+                        levels = 4)
+
+rf_tune_wf <- workflow() |> 
+  add_recipe(balanced_rec) |> 
+  add_model(rf_tune)
+
+rf_grid_search <- tune_grid(
+    rf_tune_wf,
+    resamples = balanced_cvs,
+    grid = rf_grid
+  )
+rf_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max(mean, n = 5)
 ```
+
+##### Results:
+
+- Best ROC AUC: 0.8253694	
+- m_try: 7 
+- Minimum n: 40
+
+
+
+### Best Model:
+
+**Strategy:**
+
+- Pick top 3 models in terms of cross-validated `roc_auc` (on balanced training set)
+- Fit all three models on balanced training data
+- Predict on test set (random sample from full data set)
+- Pick the best model on test set in terms of **recall**
+
+
