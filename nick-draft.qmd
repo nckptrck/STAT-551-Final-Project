@@ -19,6 +19,16 @@ library(discrim)
 cdc <- read_csv('diabetes-cdc.csv')
 
 cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
+
+cdc_balanced <- cdc_balanced |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(1,0),
+                                  labels = c('Prediabetes/Diabetes','Healthy')))
+
+cdc <- cdc |> 
+  mutate(Diabetes_binary = factor(Diabetes_binary,
+                                  levels = c(1,0),
+                                  labels = c('Prediabetes/Diabetes','Healthy')))
 ```
 
 
@@ -26,6 +36,7 @@ cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
 
 ```{r}
 #| label: eda
+#| eval: false
 cdc |> 
   mutate(Diabetes_binary = factor(Diabetes_binary,
                                   levels = c(0, 1),
@@ -272,6 +283,7 @@ cdc_balanced |>
 
 ```{r}
 #| label: data-cleaning
+#| eval: false
 
 cdc_balanced <- cdc_balanced |> 
   mutate(Diabetes_binary = factor(Diabetes_binary,
@@ -295,6 +307,7 @@ cdc <- cdc |>
 
 ```{r}
 #| label: balanced-data-logistic-reg
+#| eval: false
 set.seed(1738)
 balanced_cvs <- vfold_cv(cdc_balanced, v = 5)
 
@@ -329,6 +342,7 @@ cdc_balanced |>
 
 ```{r}
 #| label: full-data-logistic-reg
+#| eval: false
 set.seed(1738)
 full_cvs <- vfold_cv(cdc, v = 5)
 
@@ -363,6 +377,7 @@ cdc |>
 
 ```{r}
 #| label: balanced-predict-full
+#| eval: false
 print('BALANCED TRAINING:')
 cdc <- cdc |> 
   mutate(balanced.pred = predict(balanced_fit, new_data = cdc)$.pred_class)
@@ -401,6 +416,7 @@ list('accuracy' = ac$.estimate,
 
 ```{r}
 #| label: test-set
+set.seed(1738)
 test_set <- cdc[sample(nrow(cdc), size = 10000),]
 ```
 
@@ -408,7 +424,7 @@ test_set <- cdc[sample(nrow(cdc), size = 10000),]
 
 ```{r}
 #| label: logistic-regression
-
+#| eval: false
 logit_simple_mod <- logistic_reg() %>%
   set_mode("classification") %>%
   set_engine("glm")
@@ -438,7 +454,7 @@ logit_cv |> collect_metrics()
 
 ```{r}
 #| label: logistic-regression-tune
-
+#| eval: false
 
 grid_params <- grid_regular(penalty(),
                             mixture(),
@@ -471,6 +487,7 @@ lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 
 ```{r}
 #| label: lda
+#| eval: false
 lda_mod <- discrim_linear() %>%
   set_engine("MASS") %>%
   set_mode("classification")
@@ -492,6 +509,7 @@ lda_cv |> collect_metrics()
 
 ```{r}
 #| label: qda
+#| eval: false
 qda_mod <- discrim_regularized(frac_common_cov = 0) %>% 
              set_engine("klaR") %>% 
              set_mode("classification")
@@ -511,7 +529,7 @@ qda_cv |> collect_metrics()
 
 ```{r}
 #| label: decision-tree
-
+#| eval: false
 tree_grid <- grid_regular(cost_complexity(),
                           tree_depth(),
                           min_n(), 
@@ -552,6 +570,7 @@ tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_
 
 ```{r}
 #| label: bagging
+#| eval: false
 bag_tree_tune <- bag_tree(cost_complexity = tune(),
                           tree_depth = tune(),
                           min_n = tune()) %>%
@@ -584,7 +603,7 @@ bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slic
 
 ```{r}
 #| label: random-forest
-
+#| eval: false
 rf_tune <- rand_forest(mtry = tune(), 
                        min_n = tune(),
                        trees = 200) %>%
@@ -624,5 +643,137 @@ rf_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 - Fit all three models on balanced training data
 - Predict on test set (random sample from full data set)
 - Pick the best model on test set in terms of **recall**
+
+
+##### Model 1: Penalized Logistic Regression
+
+```{r}
+#| label: logit-test-set
+# model spec
+best_lr <- logistic_reg(penalty=1.000000e-10,
+                        mixture = 0.3333333) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+best_lr_wflow <- workflow() |>
+  add_recipe(balanced_rec) |>
+  add_model(best_lr)
+
+# fit on balanced
+best_lr_fit <- best_lr_wflow |> fit(cdc_balanced)
+
+# predict on test set (not balanced)
+test_set <- test_set |> 
+  mutate(lr.pred = predict(best_lr_fit, new_data = test_set)$.pred_class)
+
+
+# Metrics 
+ac <- accuracy(test_set, truth = Diabetes_binary, estimate = lr.pred)
+pr <-  precision(test_set, truth = Diabetes_binary, estimate = lr.pred)
+rec <- recall(test_set, truth = Diabetes_binary, estimate = lr.pred)
+f1 <- f_meas(test_set, Diabetes_binary, lr.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+
+test_set |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = lr.pred)
+```
+
+
+##### Model 2: LDA
+
+```{r}
+#| label: lda-test-set
+
+# model spec
+lda_mod <- discrim_linear() %>%
+  set_engine("MASS") %>%
+  set_mode("classification")
+
+lda_wf <- workflow() |> 
+  add_recipe(balanced_rec) |> 
+  add_model(lda_mod)
+
+# fit on balanced
+lda_fit <- lda_wf |> fit(cdc_balanced)
+
+# predict on test set (not balanced)
+test_set <- test_set |> 
+  mutate(lda.pred = predict(lda_fit, new_data = test_set)$.pred_class)
+
+
+# Metrics 
+ac <- accuracy(test_set, truth = Diabetes_binary, estimate = lda.pred)
+pr <-  precision(test_set, truth = Diabetes_binary, estimate = lda.pred)
+rec <- recall(test_set, truth = Diabetes_binary, estimate = lda.pred)
+f1 <- f_meas(test_set, Diabetes_binary, lda.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+
+test_set |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = lda.pred)
+```
+
+##### Model 3: Random Forest
+
+```{r}
+#| label: rf-test-set
+
+# model spec
+rf_mod <- rand_forest(mtry = 7, 
+                       min_n = 40,
+                       trees = 2000) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+rf_wflow <- workflow() |> 
+  add_recipe(balanced_rec) |> 
+  add_model(rf_mod)
+
+
+# fit on balanced
+rf_fit <- rf_wflow |> fit(cdc_balanced)
+
+# predict on test set (not balanced)
+test_set <- test_set |> 
+  mutate(rf.pred = predict(rf_fit, new_data = test_set)$.pred_class)
+
+
+# Metrics 
+ac <- accuracy(test_set, truth = Diabetes_binary, estimate = rf.pred)
+pr <-  precision(test_set, truth = Diabetes_binary, estimate = rf.pred)
+rec <- recall(test_set, truth = Diabetes_binary, estimate = rf.pred)
+f1 <- f_meas(test_set, Diabetes_binary, rf.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+
+test_set |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = rf.pred)
+```
+
+
+
+## Final Model: **Random Forest**
+
+- Accuracy: 0.7324
+- Precision: 0.3211939
+- Recall: 0.8562044
+- F1: 0.4671446
+
+
+
+
 
 
