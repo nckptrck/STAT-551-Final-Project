@@ -16,13 +16,11 @@ library(themis)
 library(baguette)
 library(discrim)
 ```
-### Data Reading
+
+### Pancreas Data Reading, Reformatting
 
 ```{r}
-#| label: read-data
-cdc <- read_csv('diabetes-cdc.csv')
-
-cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
+#| label: read-pancreas-data
 
 pancreas <- read_csv("data/pancreas_patients.csv")
 ```
@@ -95,28 +93,61 @@ pancreas_lr_cv <- logit_mod |>
 pancreas_lr_cv |> collect_metrics()
 ```
 
+##### Results:
+
+- Best ROC AUC: 0.6601858
+- Accuracy: 0.5972518
+- Precision: 0.1195281
+- Recall: 0.6434853	
+
 ### Logistic Regression (Penalized), Pancreas Data
 
 ```{r}
+#| label: tuning logistic regression for pancreas
+
 grid_params <- grid_regular(penalty(),
                             mixture(),
-                            levels=2)
+                            levels=4)
 
-lr_tune <- logistic_reg(penalty=tune(), mixture = tune()) %>%
+pancreas_lr_tune <- logistic_reg(penalty=tune(), mixture = tune()) %>%
   set_engine("glmnet") %>%
   set_mode("classification")
 
 lr_wflow_tune <- workflow() |>
-  add_recipe(balanced_rec) |>
-  add_model(lr_tune)
+  add_recipe(full_pancreas_rec) |>
+  add_model(pancreas_lr_tune)
 
 lr_grid_search <- tune_grid(lr_wflow_tune,
-                               resamples = balanced_cvs,
+                               resamples = pancreas_cvs,
                                grid = grid_params)
 
 
-lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max(mean, n=10)
+lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max(mean)
+
+pancreas_lr2_tune <- logistic_reg(penalty=0.0000000001, mixture = 1) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+pancreas_lr2_wflow <- workflow() |>
+  add_recipe(full_pancreas_rec) |>
+  add_model(pancreas_lr2_tune)
+
+pancreas_lr2_fit <- pancreas_lr2_wflow |>
+  fit(pancreas_train)
+
+pancreas_lr2_cv <- pancreas_lr2_tune |>
+  fit_resamples(full_pancreas_rec, 
+                resamples = pancreas_cvs,
+                metrics = custom_metrics)
+
+pancreas_lr2_cv |> collect_metrics()
 ```
+
+##### Results:
+
+- Best ROC AUC: 0.6602332
+- Best mixture: 1
+- Best penalty: 1.000000e-10
 
 ### LDA
 
