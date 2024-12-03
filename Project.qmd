@@ -11,6 +11,8 @@ editor: visual
 #| label: load-libraries
 library(tidyverse)
 library(tidymodels)
+library(ROSE)
+library(themis)
 ```
 ### Data Reading
 
@@ -54,17 +56,32 @@ pancreas <- pancreas |>
          EDUCATION = factor(EDUCATION),
          ETHCAT = factor(ETHCAT),
          WORK_INCOME_TCR = factor(WORK_INCOME_TCR),
-         ON_DIALYSIS = factor(ON_DIALYSIS))
+         ON_DIALYSIS = factor(ON_DIALYSIS)) |>
+  select(-`...1`)
   
 full_pancreas_rec <- recipe(death ~ ., data=pancreas) |>
   step_dummy(ABO, DIAB, EDUCATION, ETHCAT, GENDER, WORK_INCOME_TCR, ON_DIALYSIS) |>
-  step_normalize(INIT_AGE, INIT_BMI_CALC, HGT_CM_TCR, TOT_SERUM_ALBUM, WGT_KG_TCR, INIT_CPRA, INIT_QUAL_DIFF)
-
-pancreas_cvs <- vfold_cv(pancreas, v=5)
-
-pancreas_test <- pancreas %>%
-  sample_frac(size = 0.2)
+  step_normalize(INIT_AGE, INIT_BMI_CALC, HGT_CM_TCR, TOT_SERUM_ALBUM, WGT_KG_TCR, INIT_CPRA, INIT_QUAL_DIFF) |>
+  step_rose(death)
 ```
+
+### Create Pancreas Test Set
+
+```{r}
+pancreas$id <- 1:nrow(pancreas)
+pancreas_train <- pancreas |>
+  sample_frac(.8)
+
+pancreas_test <- pancreas |>
+  anti_join(pancreas_train, by="id")
+
+pancreas_train <- pancreas_train |>
+  select(-id)
+
+pancreas_test <- pancreas_test |>
+  select(-id)
+```
+
 
 ### Logistic Regression (No Penalty), Pancreas Data
 
@@ -80,9 +97,11 @@ pancreas_lr_wflow <- workflow() |>
   add_model(logit_mod)
 
 pancreas_lr_fit <- pancreas_lr_wflow |>
-  fit(pancreas)
+  fit(pancreas_train)
 
 custom_metrics <- metric_set(accuracy, roc_auc, precision, recall, f_meas)
+
+pancreas_cvs <- vfold_cv(pancreas_train, v=5)
 
 pancreas_lr_cv <- logit_mod |>
   fit_resamples(full_pancreas_rec, 
@@ -90,16 +109,6 @@ pancreas_lr_cv <- logit_mod |>
                 metrics = custom_metrics)
 
 pancreas_lr_cv |> collect_metrics()
-
-pancreas |> 
-  mutate(predicted = predict(pancreas_lr_fit, new_data = pancreas_test)$.pred_class))
-
-pancreas |>
-  count(death = 1)
-
-pancreas |>
-  group_by(death) |> 
-  count()
 ```
 
 
