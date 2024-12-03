@@ -146,7 +146,7 @@ pancreas_lr2_cv |> collect_metrics()
 ### LDA
 
 ```{r}
-#| label: lda
+#| label: lda for pancreas
 #| eval: false
 lda_mod <- discrim_linear() %>%
   set_engine("MASS") %>%
@@ -162,7 +162,7 @@ lda_cv |> collect_metrics()
 ### QDA
 
 ```{r}
-#| label: qda
+#| label: qda for pancreas
 #| eval: false
 qda_mod <- discrim_regularized(frac_common_cov = 0) %>% 
              set_engine("klaR") %>% 
@@ -178,7 +178,7 @@ qda_cv |> collect_metrics()
 ### Decision Tree
 
 ```{r}
-#| label: decision-tree
+#| label: decision tree for pancreas
 #| eval: false
 tree_grid <- grid_regular(cost_complexity(),
                           tree_depth(),
@@ -212,7 +212,7 @@ tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_
 ### Bagging
 
 ```{r}
-#| label: bagging
+#| label: bagging for pancreas
 #| eval: false
 bag_tree_tune <- bag_tree(cost_complexity = tune(),
                           tree_depth = tune(),
@@ -237,7 +237,7 @@ bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slic
 ### Random Forest
 
 ```{r}
-#| label: random-forest
+#| label: random forest for pancreas
 #| eval: false
 rf_tune <- rand_forest(mtry = tune(), 
                        min_n = tune(),
