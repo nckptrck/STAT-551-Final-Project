@@ -20,7 +20,7 @@ library(discrim)
 ### Pancreas Data Reading, Reformatting
 
 ```{r}
-#| label: read-data
+#| label: read-pancreas-data
 
 pancreas <- read_csv("data/pancreas_patients.csv")
 
