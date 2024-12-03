@@ -9,7 +9,6 @@ editor: visual
 #| label: load-libraries
 library(tidyverse)
 library(tidymodels)
-library(gridExtra)
 library(baguette)
 library(discrim)
 ```

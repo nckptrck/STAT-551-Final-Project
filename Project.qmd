@@ -27,25 +27,6 @@ cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
 pancreas <- read_csv("data/pancreas_patients.csv")
 ```
 
-
-```{r}
-#| label: eda
-
-
-cdc |> 
-  mutate(Diabetes_012 = factor(Diabetes_012,
-                          levels = c(0, 1, 2),
-                          labels = c('No Diabetes',
-                                     'Prediabetes',
-                                     'Diabetes'))) |> 
-  ggplot(aes(x = Diabetes_012)) +
-  geom_bar()
-
-
-cdc_balanced |> 
-  mutate()
-```
-
 # Pancreas Data
 
 ```{r}
@@ -140,15 +121,15 @@ lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 ### LDA
 
 ```{r}
-#| label: lda
+#| label: lda on pancreas
 #| eval: false
 lda_mod <- discrim_linear() %>%
   set_engine("MASS") %>%
   set_mode("classification")
 
 lda_cv <- lda_mod |> 
-  fit_resamples(balanced_rec,
-                resamples = balanced_cvs)
+  fit_resamples(full_pancreas_rec,
+                resamples = pancreas_cvs)
 
 lda_cv |> collect_metrics()
 ```
@@ -156,15 +137,15 @@ lda_cv |> collect_metrics()
 ### QDA
 
 ```{r}
-#| label: qda
+#| label: qda on pancreas
 #| eval: false
 qda_mod <- discrim_regularized(frac_common_cov = 0) %>% 
              set_engine("klaR") %>% 
              set_mode("classification")
 
 qda_cv <- qda_mod |> 
-  fit_resamples(balanced_rec,
-                resamples = balanced_cvs)
+  fit_resamples(full_pancreas_rec,
+                resamples = pancreas_cvs)
 
 qda_cv |> collect_metrics()
 ```
@@ -172,16 +153,13 @@ qda_cv |> collect_metrics()
 ### Decision Tree
 
 ```{r}
-#| label: decision-tree
+#| label: decision-tree-pancreas
 #| eval: false
 tree_grid <- grid_regular(cost_complexity(),
                           tree_depth(),
                           min_n(), 
                           levels = 3)
 
-balanced_rec <- recipe(Diabetes_binary ~ ., data = cdc_balanced) |> 
-  step_dummy(all_factor_predictors()) |> 
-  step_normalize(BMI, MentHlth, PhysHlth)
 
 tree_mod_tune <- decision_tree(cost_complexity = tune(),
                           tree_depth = tune(),
@@ -191,22 +169,27 @@ tree_mod_tune <- decision_tree(cost_complexity = tune(),
 
 tree_wflow <- workflow() %>%
   add_model(tree_mod_tune) %>% 
-  add_recipe(balanced_rec)
+  add_recipe(full_pancreas_rec)
 
 tree_grid_search <-
   tune_grid(
     tree_wflow,
-    resamples = balanced_cvs,
+    resamples = pancreas_cvs,
     grid = tree_grid
   )
 
 tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+##### Results
+
+- ROC AUC: 0.5
+
+
 
 ### Bagging
 
 ```{r}
-#| label: bagging
+#| label: bagging-pancreas
 #| eval: false
 bag_tree_tune <- bag_tree(cost_complexity = tune(),
                           tree_depth = tune(),
@@ -216,22 +199,26 @@ bag_tree_tune <- bag_tree(cost_complexity = tune(),
 
 
 bagged_wf <- workflow() |> 
-  add_recipe(balanced_rec) |> 
+  add_recipe(full_pancreas_rec) |> 
   add_model(bag_tree_tune)
 
 bagged_grid_search <- tune_grid(
     bagged_wf,
-    resamples = balanced_cvs,
+    resamples = pancreas_cvs,
     grid = tree_grid
   )
 
 bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+##### Results
+
+- ROC AUC: 0.5
+
 
 ### Random Forest
 
 ```{r}
-#| label: random-forest
+#| label: random-forest-pancreas
 #| eval: false
 rf_tune <- rand_forest(mtry = tune(), 
                        min_n = tune(),
@@ -245,22 +232,28 @@ rf_grid <- grid_regular(mtry(c(1,21)),
                         levels = 4)
 
 rf_tune_wf <- workflow() |> 
-  add_recipe(balanced_rec) |> 
+  add_recipe(full_pancreas_rec) |> 
   add_model(rf_tune)
 
 rf_grid_search <- tune_grid(
     rf_tune_wf,
-    resamples = balanced_cvs,
+    resamples = pancreas_cvs,
     grid = rf_grid
   )
 rf_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max(mean, n = 5)
 ```
 
+##### Results
+
+- ROC AUC: 
+
+
+
 # CDC Data
 
 
 ```{r}
-#| label: read-data
+#| label: read-cdc-data
 cdc <- read_csv('diabetes-cdc.csv')
 
 cdc_balanced <- read_csv('diabetes-cdc-balanced.csv')
@@ -280,7 +273,7 @@ cdc <- cdc |>
 ## Checkpoint 2
 
 ```{r}
-#| label: eda
+#| label: eda-cdc
 #| eval: false
 cdc |> 
   mutate(Diabetes_binary = factor(Diabetes_binary,
@@ -551,7 +544,7 @@ cdc <- cdc |>
 # Preliminary Model
 
 ```{r}
-#| label: balanced-data-logistic-reg
+#| label: balanced-data-logistic-reg-cdc
 #| eval: false
 set.seed(1738)
 balanced_cvs <- vfold_cv(cdc_balanced, v = 5)
@@ -586,7 +579,7 @@ cdc_balanced |>
 ```
 
 ```{r}
-#| label: full-data-logistic-reg
+#| label: full-data-logistic-reg-cdc
 #| eval: false
 set.seed(1738)
 full_cvs <- vfold_cv(cdc, v = 5)
@@ -621,7 +614,7 @@ cdc |>
 ## Does training on balanced help predict on unbalanced?
 
 ```{r}
-#| label: balanced-predict-full
+#| label: balanced-predict-full-cdc
 #| eval: false
 print('BALANCED TRAINING:')
 cdc <- cdc |> 
@@ -660,7 +653,7 @@ list('accuracy' = ac$.estimate,
 **Random Sample of Unbalanced Data**
 
 ```{r}
-#| label: test-set
+#| label: test-set-cdc
 set.seed(1738)
 test_set <- cdc[sample(nrow(cdc), size = 10000),]
 ```
@@ -668,7 +661,7 @@ test_set <- cdc[sample(nrow(cdc), size = 10000),]
 ### Logistic Regression (No Penalty)
 
 ```{r}
-#| label: logistic-regression
+#| label: logistic-regression-cdc
 #| eval: false
 logit_simple_mod <- logistic_reg() %>%
   set_mode("classification") %>%
@@ -698,7 +691,7 @@ logit_cv |> collect_metrics()
 ### Logistic Regression (Penalty)
 
 ```{r}
-#| label: logistic-regression-tune
+#| label: logistic-regression-tune-cdc
 #| eval: false
 
 grid_params <- grid_regular(penalty(),
@@ -731,7 +724,7 @@ lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 ### lda
 
 ```{r}
-#| label: lda
+#| label: lda-cdc
 #| eval: false
 lda_mod <- discrim_linear() %>%
   set_engine("MASS") %>%
@@ -750,7 +743,7 @@ lda_cv |> collect_metrics()
 ### qda
 
 ```{r}
-#| label: qda
+#| label: qda-cdc
 #| eval: false
 qda_mod <- discrim_regularized(frac_common_cov = 0) %>% 
              set_engine("klaR") %>% 
@@ -770,7 +763,7 @@ qda_cv |> collect_metrics()
 ### Decision Tree
 
 ```{r}
-#| label: decision-tree
+#| label: decision-tree-cdc
 #| eval: false
 tree_grid <- grid_regular(cost_complexity(),
                           tree_depth(),
@@ -811,7 +804,7 @@ tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_
 ### Bagging
 
 ```{r}
-#| label: bagging
+#| label: bagging-cdc
 #| eval: false
 bag_tree_tune <- bag_tree(cost_complexity = tune(),
                           tree_depth = tune(),
@@ -844,7 +837,7 @@ bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slic
 ### Random Forest
 
 ```{r}
-#| label: random-forest
+#| label: random-forest-cdc
 #| eval: false
 rf_tune <- rand_forest(mtry = tune(), 
                        min_n = tune(),
@@ -890,7 +883,7 @@ rf_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 ##### Model 1: Penalized Logistic Regression
 
 ```{r}
-#| label: logit-test-set
+#| label: logit-test-set-cdc
 # model spec
 best_lr <- logistic_reg(penalty=1.000000e-10,
                         mixture = 0.3333333) %>%
@@ -924,3 +917,90 @@ test_set |>
   conf_mat(truth = Diabetes_binary,
            estimate = lr.pred)
 ```
+
+##### Model 2: LDA
+
+```{r}
+#| label: lda-test-set-cdc
+
+# model spec
+lda_mod <- discrim_linear() %>%
+  set_engine("MASS") %>%
+  set_mode("classification")
+
+lda_wf <- workflow() |> 
+  add_recipe(balanced_rec) |> 
+  add_model(lda_mod)
+
+# fit on balanced
+lda_fit <- lda_wf |> fit(cdc_balanced)
+
+# predict on test set (not balanced)
+test_set <- test_set |> 
+  mutate(lda.pred = predict(lda_fit, new_data = test_set)$.pred_class)
+
+
+# Metrics 
+ac <- accuracy(test_set, truth = Diabetes_binary, estimate = lda.pred)
+pr <-  precision(test_set, truth = Diabetes_binary, estimate = lda.pred)
+rec <- recall(test_set, truth = Diabetes_binary, estimate = lda.pred)
+f1 <- f_meas(test_set, Diabetes_binary, lda.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+
+test_set |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = lda.pred)
+```
+
+##### Model 3: Random Forest
+
+```{r}
+#| label: rf-test-set
+
+# model spec
+rf_mod <- rand_forest(mtry = 7, 
+                       min_n = 40,
+                       trees = 2000) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+rf_wflow <- workflow() |> 
+  add_recipe(balanced_rec) |> 
+  add_model(rf_mod)
+
+
+# fit on balanced
+rf_fit <- rf_wflow |> fit(cdc_balanced)
+
+# predict on test set (not balanced)
+test_set <- test_set |> 
+  mutate(rf.pred = predict(rf_fit, new_data = test_set)$.pred_class)
+
+
+# Metrics 
+ac <- accuracy(test_set, truth = Diabetes_binary, estimate = rf.pred)
+pr <-  precision(test_set, truth = Diabetes_binary, estimate = rf.pred)
+rec <- recall(test_set, truth = Diabetes_binary, estimate = rf.pred)
+f1 <- f_meas(test_set, Diabetes_binary, rf.pred)
+
+list('accuracy' = ac$.estimate,
+     'precision' = pr$.estimate,
+     'recall' = rec$.estimate,
+     'f1' = f1$.estimate)
+
+test_set |> 
+  conf_mat(truth = Diabetes_binary,
+           estimate = rf.pred)
+```
+
+
+## Final Model: **Random Forest**
+
+- Accuracy: 0.7324
+- Precision: 0.3211939
+- Recall: 0.8562044
+- F1: 0.4671446
