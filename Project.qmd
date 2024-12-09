@@ -45,6 +45,8 @@ full_pancreas_rec <- recipe(death ~ ., data=pancreas) |>
   step_dummy(ABO, DIAB, EDUCATION, ETHCAT, GENDER, WORK_INCOME_TCR, ON_DIALYSIS) |>
   step_normalize(INIT_AGE, INIT_BMI_CALC, HGT_CM_TCR, TOT_SERUM_ALBUM, WGT_KG_TCR, INIT_CPRA, INIT_QUAL_DIFF) |>
   step_rose(death)
+rf_pancreas_rec <- recipe(death ~ ., data=pancreas) |>
+  step_rose(death)
 ```
 
 ### Create Pancreas Test Set
@@ -63,7 +65,6 @@ pancreas_train <- pancreas_train |>
 pancreas_test <- pancreas_test |>
   select(-id)
 ```
-
 
 ### Logistic Regression (No Penalty), Pancreas Data
 
@@ -95,10 +96,10 @@ pancreas_lr_cv |> collect_metrics()
 
 ##### Results:
 
-- Best ROC AUC: 0.6601858
-- Accuracy: 0.5972518
-- Precision: 0.1195281
-- Recall: 0.6434853	
+-   Best ROC AUC: 0.6601858
+-   Accuracy: 0.5972518
+-   Precision: 0.1195281
+-   Recall: 0.6434853
 
 ### Logistic Regression (Penalized), Pancreas Data
 
@@ -145,9 +146,9 @@ pancreas_lr2_cv |> collect_metrics()
 
 ##### Results:
 
-- Best ROC AUC: 0.6602332
-- Best mixture: 1
-- Best penalty: 1.000000e-10
+-   Best ROC AUC: 0.6602332
+-   Best mixture: 1
+-   Best penalty: 1.000000e-10
 
 ### LDA
 
@@ -211,11 +212,10 @@ tree_grid_search <-
 
 tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+
 ##### Results
 
-- ROC AUC: 0.5
-
-
+-   ROC AUC: 0.5
 
 ### Bagging
 
@@ -241,10 +241,10 @@ bagged_grid_search <- tune_grid(
 
 bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+
 ##### Results
 
-- ROC AUC: 0.5
-
+-   ROC AUC: 0.5
 
 ### Random Forest
 
@@ -276,12 +276,48 @@ rf_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 
 ##### Results
 
-- ROC AUC: 
+-   ROC AUC:
 
+    ### Final RF Model
 
+    ```{r}
+    rf_spec <- rand_forest(
+      mtry = 3,
+      min_n = 40
+    ) %>%
+      set_engine("ranger", importance = "permutation") %>%
+      set_mode("classification")
+
+    rf_wflow <- workflow() %>% 
+      add_recipe(rf_pancreas_rec) %>% 
+      add_model(rf_spec)
+
+    rf_fit <- rf_wflow %>% 
+      fit(pancreas_train)
+
+    rf_preds <- rf_fit %>%
+      predict(new_data = pancreas_test, type = "class") %>%
+      bind_cols(pancreas_test %>% select(death)) %>%
+      rename(truth = death, pred_class = .pred_class)
+
+    rf_probs <- rf_fit %>%
+      predict(new_data = pancreas_test, type = "prob") %>%
+      bind_cols(pancreas_test %>% select(death)) %>%
+      rename(truth = death)
+
+    conf_matrix <- rf_preds %>%
+      conf_mat(truth = truth, estimate = pred_class)
+
+    conf_matrix
+
+    rf_fit_fit <- (rf_fit %>% extract_fit_parsnip())
+
+    sort(-rf_fit$fit$fit$fit$variable.importance)
+
+    summary(conf_matrix)
+    ```
 
 # CDC Data
-
 
 ```{r}
 #| label: read-cdc-data
@@ -299,7 +335,6 @@ cdc <- cdc |>
                                   levels = c(1,0),
                                   labels = c('Prediabetes/Diabetes','Healthy')))
 ```
-
 
 ## Checkpoint 2
 
@@ -717,7 +752,7 @@ logit_cv |> collect_metrics()
 
 ##### Results:
 
-- Best ROC AUC: 0.8264015
+-   Best ROC AUC: 0.8264015
 
 ### Logistic Regression (Penalty)
 
@@ -748,9 +783,9 @@ lr_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 
 ##### Results:
 
-- Best ROC AUC: 0.8264048
-- Best penalty: 1.000000e-10
-- Best mixture: 0.3333333
+-   Best ROC AUC: 0.8264048
+-   Best penalty: 1.000000e-10
+-   Best mixture: 0.3333333
 
 ### lda
 
@@ -767,9 +802,10 @@ lda_cv <- lda_mod |>
 
 lda_cv |> collect_metrics()
 ```
+
 ##### Results:
 
-- Best ROC AUC: 0.8254003	
+-   Best ROC AUC: 0.8254003
 
 ### qda
 
@@ -789,7 +825,7 @@ qda_cv |> collect_metrics()
 
 ##### Results:
 
-- Best ROC AUC: 0.7784700	
+-   Best ROC AUC: 0.7784700
 
 ### Decision Tree
 
@@ -824,13 +860,13 @@ tree_grid_search <-
 
 tree_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slice_max(mean, n = 5)
 ```
+
 ##### Results:
 
-- Best ROC AUC: 0.8110074	
-- Cost Complexity: 1.000000e-10	
-- Tree Depth: 8
-- Minimum n: 2
-
+-   Best ROC AUC: 0.8110074\
+-   Cost Complexity: 1.000000e-10
+-   Tree Depth: 8
+-   Minimum n: 2
 
 ### Bagging
 
@@ -859,11 +895,10 @@ bagged_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |>  slic
 
 ##### Results:
 
-- Best ROC AUC: 0.8197403
-- Cost Complexity: 3.162278e-06
-- Tree Depth: 8
-- Minimum n: 40
-
+-   Best ROC AUC: 0.8197403
+-   Cost Complexity: 3.162278e-06
+-   Tree Depth: 8
+-   Minimum n: 40
 
 ### Random Forest
 
@@ -895,21 +930,18 @@ rf_grid_search |> collect_metrics() |> filter(.metric == "roc_auc") |> slice_max
 
 ##### Results:
 
-- Best ROC AUC: 0.8253694	
-- m_try: 7 
-- Minimum n: 40
-
-
+-   Best ROC AUC: 0.8253694\
+-   m_try: 7
+-   Minimum n: 40
 
 ### Best Model:
 
 **Strategy:**
 
-- Pick top 3 models in terms of cross-validated `roc_auc` (on balanced training set)
-- Fit all three models on balanced training data
-- Predict on test set (random sample from full data set)
-- Pick the best model on test set in terms of **recall**
-
+-   Pick top 3 models in terms of cross-validated `roc_auc` (on balanced training set)
+-   Fit all three models on balanced training data
+-   Predict on test set (random sample from full data set)
+-   Pick the best model on test set in terms of **recall**
 
 ##### Model 1: Penalized Logistic Regression
 
@@ -1028,10 +1060,9 @@ test_set |>
            estimate = rf.pred)
 ```
 
-
 ## Final Model: **Random Forest**
 
-- Accuracy: 0.7324
-- Precision: 0.3211939
-- Recall: 0.8562044
-- F1: 0.4671446
+-   Accuracy: 0.7324
+-   Precision: 0.3211939
+-   Recall: 0.8562044
+-   F1: 0.4671446
